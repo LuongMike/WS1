@@ -6,6 +6,9 @@ import dto.StartupProjectsDTO;
 import dto.UserDTO;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.sql.Date;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletException;
@@ -13,6 +16,7 @@ import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import utils.AuthenUtils;
 
 @WebServlet(name = "MainController", urlPatterns = {"/MainController"})
 public class MainController extends HttpServlet {
@@ -20,23 +24,7 @@ public class MainController extends HttpServlet {
     private static final String LOGIN_PAGE = "login.jsp";
     private StartupProjectsDAO spdao = new StartupProjectsDAO();
 
-    //ham nay de lay ra user 
-    public UserDTO getUser(String strUserID) {
-        UserDAO udao = new UserDAO();
-        UserDTO user = udao.readByID(strUserID);
-        return user;
-    }
-
-    public boolean isValidLogin(String strUserID, String strPassword) {
-        UserDTO user = getUser(strUserID);
-        if (user != null && user.getPassword().equals(strPassword)) {
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    private void search(HttpServletRequest request, HttpServletResponse response)
+    private String processSearch(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
         String searchTerm = request.getParameter("searchTerm");
@@ -46,6 +34,122 @@ public class MainController extends HttpServlet {
         List<StartupProjectsDTO> projects = spdao.search(searchTerm);
         request.setAttribute("projects", projects);
         request.setAttribute("searchTerm", searchTerm);
+        return "search.jsp";
+    }
+
+    private String processLogin(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        String url = LOGIN_PAGE;
+        //login aciton
+        String strUserID = request.getParameter("strUserID");
+        String strPassword = request.getParameter("strPassword");
+        if (AuthenUtils.isValidLogin(strUserID, strPassword)) {
+            url = "search.jsp";
+            UserDTO user = AuthenUtils.getUser(strUserID);
+            request.getSession().setAttribute("user", user);
+            processSearch(request, response);
+        } else {
+            url = "login.jsp";
+            request.setAttribute("message", "Incorrect User or Password! Please try again.");
+        }
+        return url;
+    }
+
+    private String processLogout(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        String url = LOGIN_PAGE;
+        url = "login.jsp";
+        request.getSession().invalidate();
+        return url;
+    }
+
+    private String processUpdate(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        String url = LOGIN_PAGE;
+        int projectID = Integer.parseInt(request.getParameter("id"));
+
+        StartupProjectsDTO project = spdao.getProjectByID(projectID);
+
+        if (project != null) {
+            request.setAttribute("project", project);
+            url = "update.jsp";
+        } else {
+            request.setAttribute("message", "Project Not Found!");
+            url = "search.jsp";
+        }
+        return url;
+    }
+
+    private String processDoUpdate(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        String url = LOGIN_PAGE;
+        int projectID = Integer.parseInt(request.getParameter("projectId"));
+        String newStatus = request.getParameter("newStatus");
+
+        boolean success = spdao.updateStatus(projectID, newStatus);
+
+        if (success) {
+            request.setAttribute("message", "Successful updated!");
+        } else {
+            request.setAttribute("message", "Update Fail!");
+        }
+        processSearch(request, response);
+
+        return url = "search.jsp";
+    }
+
+    private String processAdd(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException, ClassNotFoundException {
+        String url = LOGIN_PAGE;
+
+        String projectName = request.getParameter("projectName");
+        String description = request.getParameter("description");
+        String status = request.getParameter("status");
+        String estimatedLaunch = request.getParameter("estimatedLaunch");
+
+        String errorMessage = null;
+        java.sql.Date estimatedLaunchDate = null;
+
+        if (projectName == null || projectName.trim().isEmpty()) {
+            errorMessage = "Project Name cannot be empty!";
+        } else if (spdao.isProjectExists(projectName)) {
+            errorMessage = "Project Name already exists! Please choose another name.";
+        } else if (description == null || description.trim().isEmpty()) {
+            errorMessage = "Description cannot be empty!";
+        } else if (status == null || status.trim().isEmpty()) {
+            errorMessage = "Invalid status selected!";
+        } else if (estimatedLaunch == null || estimatedLaunch.trim().isEmpty()) {
+            errorMessage = "Estimated Launch date cannot be empty!";
+        } else {
+            try {
+                LocalDate inputDate = LocalDate.parse(estimatedLaunch);
+                LocalDate today = LocalDate.now();
+
+                if (inputDate.isAfter(today)) {
+                    errorMessage = "Estimated Launch date cannot be in the future! Please enter a date before " + today + ".";
+                } else {
+                    estimatedLaunchDate = Date.valueOf(inputDate);
+                }
+            } catch (DateTimeParseException e) {
+                errorMessage = "Invalid date format! Please use YYYY-MM-DD.";
+            }
+        }
+        if (errorMessage != null) {
+            request.setAttribute("message", errorMessage);
+            url = "add.jsp";
+        } else {
+            StartupProjectsDTO newProject = new StartupProjectsDTO(0, projectName, description, status, estimatedLaunchDate);
+            boolean success = spdao.create(newProject);
+
+            if (success) {
+                request.setAttribute("message", "Project added successfully!");
+                url = "MainController?action=search"; // Quay lại search.jsp 
+            } else {
+                request.setAttribute("message", "Failed to add project.");
+                url = "add.jsp"; // Giữ nguyên trang nếu có lỗi
+            }
+        }
+        return url;
     }
 
     protected void processRequest(HttpServletRequest request, HttpServletResponse response)
@@ -59,103 +163,17 @@ public class MainController extends HttpServlet {
             }
 
             if (action != null && action.equals("login")) {
-                //login aciton
-                String strUserID = request.getParameter("strUserID");
-                String strPassword = request.getParameter("strPassword");
-                if (isValidLogin(strUserID, strPassword)) {
-
-                    UserDTO user = getUser(strUserID);
-                    request.getSession().setAttribute("user", user);
-
-                    // Kiểm tra user có null không trước khi lấy role
-                    if (user != null && user.getRole() != null) {
-                        if ("Founder".equals(user.getRole())) {
-                            url = "search.jsp";
-                            search(request, response);
-                        } else if ("Team Member".equals(user.getRole())) {
-                            url = "search1.jsp";
-                        } else {
-                            request.setAttribute("message", "Unauthorized role.");
-                            url = LOGIN_PAGE;
-                        }
-                    } else {
-                        request.setAttribute("message", "User role is not defined.");
-                        url = LOGIN_PAGE;
-                    }
-                } else {
-                    url = "login.jsp";
-                    request.setAttribute("message", "Incorrect User or Password! Please try again.");
-                }
+                url = processLogin(request, response);
             } else if (action != null && action.equals("logout")) {
-                url = "login.jsp";
-                request.getSession().invalidate();
+                url = processLogout(request, response);
             } else if (action != null && action.equals("search")) {
-                url = "search.jsp";
-                search(request, response);
+                url = processSearch(request, response);
             } else if (action != null && action.equals("update")) {
-                int projectID = Integer.parseInt(request.getParameter("id"));
-
-                StartupProjectsDTO project = spdao.getProjectByID(projectID);
-
-                if (project != null) {
-                    request.setAttribute("project", project);
-                    url = "update.jsp";
-                } else {
-                    request.setAttribute("message", "Project Not Found!");
-                    url = "search.jsp";
-                }
+                url = processUpdate(request, response);
             } else if (action != null && action.equals("doUpdate")) {
-                int projectID = Integer.parseInt(request.getParameter("projectId"));
-                String newStatus = request.getParameter("newStatus");
-
-                boolean success = spdao.updateStatus(projectID, newStatus);
-
-                if (success) {
-                    request.setAttribute("message", "Successful updated!");
-                } else {
-                    request.setAttribute("message", "Update Fail!");
-                }
-                search(request, response);
-                url = "search.jsp";
+                url = processDoUpdate(request, response);
             } else if (action != null && action.equals("addProject")) {
-                String projectName = request.getParameter("projectName");
-                String description = request.getParameter("description");
-                String status = request.getParameter("status");
-                String estimatedLaunch = request.getParameter("estimatedLaunch");
-
-                String errorMessage = null;
-                java.sql.Date estimatedLaunchDate = null;
-
-                if (projectName == null || projectName.trim().isEmpty()) {
-                    errorMessage = "Project Name cannot be empty!";
-                } else if (description == null || description.trim().isEmpty()) {
-                    errorMessage = "Description cannot be empty!";
-                } else if (status == null || status.trim().isEmpty()) {
-                    errorMessage = "Invalid status selected!";
-                } else if (estimatedLaunch == null || estimatedLaunch.trim().isEmpty()) {
-                    errorMessage = "Estimated Launch date cannot be empty!";
-                } else {
-                    try {
-                        estimatedLaunchDate = java.sql.Date.valueOf(estimatedLaunch);
-                    } catch (IllegalArgumentException e) {
-                        errorMessage = "Invalid date format!";
-                    }
-                }
-                if (errorMessage != null) {
-                    request.setAttribute("message", errorMessage);
-                    url = "add.jsp";
-                } else {
-                    StartupProjectsDTO newProject = new StartupProjectsDTO(0, projectName, description, status, estimatedLaunchDate);
-                    boolean success = spdao.create(newProject);
-
-                    if (success) {
-                        request.setAttribute("message", "Project added successfully!");
-                        url = "MainController?action=search"; // Quay lại search.jsp                    }
-                    } else {
-                        request.setAttribute("message", "Failed to add project.");
-                        url = "add.jsp"; // Giữ nguyên trang nếu có lỗi
-                    }
-                }
+                url = processAdd(request, response);
             }
         } catch (Exception e) {
             log("Error at MainController: " + e.toString());

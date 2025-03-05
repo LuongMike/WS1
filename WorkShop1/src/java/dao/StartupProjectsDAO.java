@@ -9,6 +9,7 @@ import dto.StartupProjectsDTO;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import utils.DButils;
@@ -120,5 +121,22 @@ public class StartupProjectsDAO implements IDAO<StartupProjectsDTO, String> {
             System.out.println(e.toString());
         }
         return null;
+    }
+    
+    public boolean isProjectExists(String projectName) throws ClassNotFoundException{
+        boolean exists = false;
+        String sql = "SELECT COUNT(*) FROM [tblStartupProjects] WHERE project_name=?";
+        try {
+            Connection conn = DButils.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, projectName);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next() && rs.getInt(1) > 0) {
+                exists= true;
+            }
+        } catch (SQLException e) {
+            System.out.println(e.toString());
+        }
+        return exists;
     }
 }

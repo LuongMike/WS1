@@ -53,15 +53,42 @@
                 background-color: #0056b3;
             }
 
+            .login-container {
+                display: flex;
+                flex-direction: column;
+                align-items: center; /* Căn giữa nội dung */
+            }
+
+            .error-message {
+                color: red;
+                font-size: 14px;
+                margin-top: 10px; /* Tạo khoảng cách với nút Login */
+                background: #ffe6e6;
+                padding: 10px;
+                border: 1px solid #ff4d4d;
+                border-radius: 5px;
+                width: 300px; /* Đảm bảo cùng độ rộng với form */
+                text-align: center;
+            }
+
+
+
         </style>
     </head>
     <body>
-        <form action="MainController" method="post">
-            <input type="hidden" name="action" value="login"/> <br/>
-            <h2>Login</h2>
-            <input type="text" name="strUserID" placeholder="User ID" required/> <br/>
-            <input type="password" name="strPassword" placeholder="Password" required/> <br/>
-            <input type="submit" value="Login"/>
-        </form>
+        <div class="login-container">
+            <form action="MainController" method="post">
+                <input type="hidden" name="action" value="login"/> <br/>
+                <h2>Login</h2>
+                <input type="text" name="strUserID" placeholder="User ID" required/> <br/>
+                <input type="password" name="strPassword" placeholder="Password" required/> <br/>
+                <input type="submit" value="Login"/>
+            </form>
+
+            <% if (request.getAttribute("message") != null) {%>
+            <p class="error-message"><%= request.getAttribute("message")%></p>
+            <% }%>
+        </div>
+
     </body>
 </html>
