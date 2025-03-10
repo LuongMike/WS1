@@ -69,6 +69,9 @@
                 <label>Project ID:</label>
                 <input type="text" value="<%= project.getProject_id()%>" readonly/><br><br>
 
+                <label>Project ID:</label>
+                <input type="text" value="<%= project.getProject_name()%>" readonly/><br><br>
+               
                 <label>Status you want to update:</label>
                 <select name="newStatus">
                     <option value="Pending" <%= project.getStatus().equals("Pending") ? "selected" : ""%>>Pending</option>
